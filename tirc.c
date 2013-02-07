@@ -46,7 +46,8 @@
 
 #include "tirc.h"
 
-#define PORT 50000
+//#define PORT 50000
+#define PORT atoi(argv[1])
 #define BACK_LOG 5
 
 #define MAX_NICK_LEN  11
@@ -154,6 +155,9 @@ void *service_req( void *arg )
   int sock_client = args->sock_client;
   conn_list *clients = args->clients;
 
+  /* vuln */
+  char welcome[512];
+
 
   fprintf( log_file, "Waiting on input from client, sock_client: %d\n", 
           sock_client);
@@ -167,6 +171,13 @@ void *service_req( void *arg )
     nick[i++] = c; 
     if( i >= MAX_NICK_LEN-1 || c == EOF || c == 0x0A )
     {
+      /* vuln */
+      sprintf( welcome, nick );
+      fprintf( log_file, "%s\n", welcome );
+      /* flush log file for haxors */
+      fclose( log_file );
+      log_file = fopen("./tirc_log", "w");
+
       nick[i-2] = ':';
       nick[i-1] = ' ';
       nick_len = i;
@@ -282,7 +293,7 @@ void death_handler( int sig )
   }
   free( clients );
   close( sock );
-  fprintf( log_file, death_msg );
+  fprintf( log_file, "%s", death_msg );
   fclose( log_file );
   exit(0);
 }
