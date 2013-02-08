@@ -66,7 +66,6 @@ int broadcast( int, char*, int );
 
 int main( int argc, char** argv ) 
 {
-  pid_t pid, sid;
   int sock_client, temp_ret;
   unsigned int addrlen;
   char ip[ INET_ADDRSTRLEN ];
@@ -189,11 +188,10 @@ void *service_req( void *arg )
   memset( buff, 0, BUFF_LEN );
   strncpy( buff, nick, nick_len );
   /* Loop until user quits */
-  int on = 1;
   while( recv(sock_client, &c, 1, 0) > 0 )
   {
     buff[i++] = c;
-    if( i > BUFF_LEN || c == EOF || c == 0x0A )
+    if( i > BUFF_LEN || c == 0x0A )
     {
       strcpy( message, buff );
       fprintf( log_file, "%s", message );
