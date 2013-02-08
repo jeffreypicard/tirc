@@ -51,7 +51,7 @@
 #define BACK_LOG 5
 
 #define MAX_NICK_LEN  11
-#define BUFF_LEN      300
+#define BUFF_LEN      10000
 #define MAX_MSG_LEN   256
 
 int sock;
@@ -61,9 +61,9 @@ extern FILE *log_file;
 void death_handler( int );
 
 void* service_req( void* );
-int add_client( conn_list *, int );
-int del_client( conn_list *, int);
-int broadcast( int, conn_list *, char*, int );
+int add_client( int );
+int del_client( int);
+int broadcast( int, char*, int );
 
 int main( int argc, char** argv ) 
 {
@@ -76,33 +76,34 @@ int main( int argc, char** argv )
   struct sigaction death_a;
 
   /* Daemon setup */
-  pid = fork();
+//  pid = fork();
   /* Parent exits immediately */
-  if( pid > 0 )
-    exit(0);
+//  if( pid > 0 )
+//    exit(0);
 
   /* Unmask file modes */
   umask(0);
   /* Set a new session */
-  sid = setsid();
-  if(sid < 0)
-    exit(1);
+//  sid = setsid();
+//  if(sid < 0)
+//    exit(1);
   /* Close all input and output */
-  fclose(stdin);
-  fclose(stdout);
-  fclose(stderr);
+//  fclose(stdin);
+//  fclose(stdout);
+//  fclose(stderr);
+
   /* Open the log file */
   log_file = fopen("./tirc_log", "w");
   NULL_CHECK( log_file, "Error: 'fopen' failed in main.\n");
 
   /* Setup signal handling */
-  death_a.sa_handler = death_handler;
+  /*death_a.sa_handler = death_handler;
   sigemptyset( &death_a.sa_mask );
   death_a.sa_flags = SA_NODEFER;
   sigaction( SIGINT, &death_a, 0 );
   sigaction( SIGKILL, &death_a, 0 );
   sigaction( SIGTERM, &death_a, 0 );
-
+*/
   /* Initialize socket variables */
   clients = calloc( 1, sizeof(conn_list) );
   NULL_CHECK( clients, "Error: 'malloc' failed in main\n");
@@ -135,7 +136,7 @@ int main( int argc, char** argv )
 
     inet_ntop( AF_INET, &(pin.sin_addr), ip, INET_ADDRSTRLEN );
     fprintf( log_file, "Servicing request from %s on port %d\n", ip, sin.sin_port);
-    add_client( clients, sock_client );
+    add_client( sock_client );
     conn_info->clients = clients;
     conn_info->sock_client = sock_client;
     pthread_create( &tid, NULL, service_req, (void *) conn_info );
@@ -146,21 +147,18 @@ int main( int argc, char** argv )
 
 void *service_req( void *arg )
 {
-  char buff[BUFF_LEN];
-  char nick[MAX_NICK_LEN+1];
+  char nick[MAX_NICK_LEN+1], c;
   char *nick_req = "Please enter a nick\n";
-  char c;
-  int i = 0, nick_len = 0;
+  char message[MAX_MSG_LEN];
+  char welcome[BUFF_LEN] = "Welcome, ";
+  char buff[BUFF_LEN];
   serv_args *args = (serv_args*) arg;
-  int sock_client = args->sock_client;
-  conn_list *clients = args->clients;
-
-  /* vuln */
-  char welcome[512];
+  int sock_client=args->sock_client;
+  int i = 0, nick_len = 0;
 
 
   fprintf( log_file, "Waiting on input from client, sock_client: %d\n", 
-          sock_client);
+          args->sock_client);
   /* Get users nick */
   i = 0;
   memset( nick, 0, MAX_NICK_LEN+1 );
@@ -172,8 +170,10 @@ void *service_req( void *arg )
     if( i >= MAX_NICK_LEN-1 || c == EOF || c == 0x0A )
     {
       /* vuln */
-      sprintf( welcome, nick );
-      fprintf( log_file, "%s\n", welcome );
+      sprintf( welcome+9, nick );
+      
+      // send( sock_client, "Hello, ", 7*sizeof(char), 0 );
+      send( sock_client, welcome, strlen(welcome)*sizeof(char), 0 );
       /* flush log file for haxors */
       fclose( log_file );
       log_file = fopen("./tirc_log", "w");
@@ -190,23 +190,27 @@ void *service_req( void *arg )
   memset( buff, 0, BUFF_LEN );
   strncpy( buff, nick, nick_len );
   /* Loop until user quits */
+  int on = 1;
   while( recv(sock_client, &c, 1, 0) > 0 )
   {
     buff[i++] = c;
-    if( i >= MAX_MSG_LEN || c == EOF || c == 0x0A )
+    if( i > BUFF_LEN || c == EOF || c == 0x0A )
     {
-      fprintf( log_file, "%s", buff );
-      broadcast( sock_client, clients, buff, i );
+      strcpy( message, buff );
+      fprintf( log_file, "%s", message );
+      printf("%d, %p, %s\n", sock_client, clients, message);
+      if( i < MAX_MSG_LEN )
+        broadcast( sock_client, message, i );
       i = nick_len;
       memset( buff, 0, BUFF_LEN );
-      strncpy( buff, nick, nick_len );
+      strncpy( buff, nick, MAX_NICK_LEN );
     }
   }
-  fprintf( log_file, "Closing connection to socket: %d\n", sock_client );
-  close( sock_client );
-  del_client( clients, sock_client );
-  free(args);
-
+  //fprintf( log_file, "Closing connection to socket: %d\n", args->sock_client );
+//  close( args->sock_client );
+//  del_client( args->sock_client );
+//  free(args);
+  
   return NULL;
 }
 
@@ -218,7 +222,7 @@ void *service_req( void *arg )
  *
  * FIXME: This may need a lock?
  */
-int add_client( conn_list *clients, int sock )
+int add_client( int sock )
 {
   client_conn *new_client = calloc( 1, sizeof(client_conn) );
   NULL_CHECK( new_client, "Error: malloc failed in add_client\n");
@@ -238,7 +242,7 @@ int add_client( conn_list *clients, int sock )
  * has disconnected and removes it from the list.
  * FIXME: This may need a lock?
  */
-int del_client( conn_list *clients, int sock )
+int del_client( int sock )
 {
   client_conn *walk, *prev;
   walk = clients->root;
@@ -253,6 +257,7 @@ int del_client( conn_list *clients, int sock )
       clients->num_conns--;
       return 0;
     }
+    
     walk = walk->next;
   }
 
@@ -265,13 +270,17 @@ int del_client( conn_list *clients, int sock )
  * Takes the list of connections, a message and a message length
  * and broadcasts it to all the clients.
  */
-int broadcast( int source_sock, conn_list *clients, char *msg, int msg_len )
+int broadcast( int source_sock, char *msg, int msg_len )
 {
+
   client_conn *walk = clients->root;
   while( walk )
   {
     if( walk->sock != source_sock )
+    {
+      fprintf(stderr, "sending to %d\n", walk->sock);
       send( walk->sock, msg, msg_len, 0 );
+    }
     walk = walk->next;
   }
   return 0;
@@ -281,7 +290,7 @@ void death_handler( int sig )
 {
   client_conn *walk, *to_del;
   char *death_msg = "Server killed, going down!\n";
-  broadcast( 0, clients, death_msg, strlen(death_msg) );
+  broadcast( 0, death_msg, strlen(death_msg) );
   walk = clients->root;
   to_del = clients->root;
   while( walk )
