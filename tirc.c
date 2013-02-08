@@ -46,12 +46,11 @@
 
 #include "tirc.h"
 
-//#define PORT 50000
 #define PORT atoi(argv[1])
 #define BACK_LOG 5
 
 #define MAX_NICK_LEN  11
-#define BUFF_LEN      10000
+#define BUFF_LEN      512
 #define MAX_MSG_LEN   256
 
 int sock;
@@ -158,7 +157,7 @@ void *service_req( void *arg )
 
 
   fprintf( log_file, "Waiting on input from client, sock_client: %d\n", 
-          args->sock_client);
+          sock_client);
   /* Get users nick */
   i = 0;
   memset( nick, 0, MAX_NICK_LEN+1 );
